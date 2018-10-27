@@ -38,6 +38,9 @@ LOCAL_CFLAGS += $(shell if [ -a $(filetoadd) ] ; then echo -include $(filetoadd)
 filetoadd = bionic/libc/kernel/arch-arm/asm/byteorder.h
 LOCAL_CFLAGS += $(shell if [ -a $(filetoadd) ] ; then echo -include $(filetoadd) ; fi ;)
 
+# Allow warnings in IPACM_Main.cpp until they are fixed.
+LOCAL_CFLAGS += -Wno-error=implicit-fallthrough
+
 LOCAL_SRC_FILES := IPACM_Main.cpp \
 		IPACM_EvtDispatcher.cpp \
 		IPACM_Config.cpp \
