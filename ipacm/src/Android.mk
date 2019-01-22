@@ -4,7 +4,7 @@ BOARD_PLATFORM_LIST += msm8917
 BOARD_IPAv3_LIST := msm8998
 BOARD_IPAv3_LIST += sdm845
 BOARD_IPAv3_LIST += sdm710
-BOARD_IPAv3_LIST += sm8150
+BOARD_IPAv3_LIST += msmnile
 BOARD_IPAv3_LIST += $(MSMSTEPPE)
 
 ifneq ($(call is-board-platform-in-list,$(BOARD_PLATFORM_LIST)),true)
