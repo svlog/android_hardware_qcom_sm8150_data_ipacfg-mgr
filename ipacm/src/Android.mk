@@ -1,6 +1,18 @@
+TARGET_DISABLE_IPACM := false
+
+ifeq ($(TARGET_USES_QMAA),true)
+ifneq ($(TARGET_USES_QMAA_OVERRIDE_DATA),true)
+	TARGET_DISABLE_IPACM := true
+endif #TARGET_USES_QMAA_OVERRIDE_DATA
+endif #TARGET_USES_QMAA
+
+
+ifneq ($(TARGET_DISABLE_IPACM),true)
+ifneq ($(TARGET_HAS_LOW_RAM),true)
 BOARD_PLATFORM_LIST := msm8909
 BOARD_PLATFORM_LIST += msm8916
 BOARD_PLATFORM_LIST += msm8917
+BOARD_PLATFORM_LIST += qm215
 BOARD_IPAv3_LIST := msm8998
 BOARD_IPAv3_LIST += sdm845
 BOARD_IPAv3_LIST += sdm710
@@ -10,6 +22,9 @@ BOARD_IPAv3_LIST += $(MSMSTEPPE)
 BOARD_IPAv3_LIST += $(TRINKET)
 BOARD_IPAv3_LIST += lito
 BOARD_IPAv3_LIST += atoll
+BOARD_IPAv3_LIST += bengal
+BOARD_ETH_BRIDGE_LIST := msmnile
+BOARD_ETH_BRIDGE_LIST += kona
 
 ifneq ($(call is-board-platform-in-list,$(BOARD_PLATFORM_LIST)),true)
 ifneq (,$(filter $(QCOM_BOARD_PLATFORMS),$(TARGET_BOARD_PLATFORM)))
@@ -27,7 +42,10 @@ LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 
 LOCAL_CFLAGS := -DFEATURE_IPA_ANDROID
 LOCAL_CFLAGS += -DFEATURE_IPACM_RESTART
+
+ifeq ($(call is-board-platform-in-list,$(BOARD_ETH_BRIDGE_LIST)),true)
 LOCAL_CFLAGS += -DFEATURE_ETH_BRIDGE_LE
+endif
 
 LOCAL_CFLAGS += -DFEATURE_IPACM_HAL -Wall -Werror -Wno-error=macro-redefined -Wno-enum-compare
 ifneq (,$(filter userdebug eng, $(TARGET_BUILD_VARIANT)))
@@ -119,5 +137,7 @@ LOCAL_MODULE_OWNER := ipacm
 include $(BUILD_PREBUILT)
 
 endif # $(TARGET_ARCH)
+endif
+endif
 endif
 endif
