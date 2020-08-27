@@ -143,6 +143,10 @@ IPACM_Config::IPACM_Config()
 	ipa_bridge_enable = false;
 	isMCC_Mode = false;
 	ipa_max_valid_rm_entry = 0;
+	/* IPA_HW_FNR_STATS */
+	hw_fnr_stats_support = false;
+	hw_counter_offset = 0;
+	sw_counter_offset = 0;
 
 	memset(&rt_tbl_default_v4, 0, sizeof(rt_tbl_default_v4));
 	memset(&rt_tbl_lan_v4, 0, sizeof(rt_tbl_lan_v4));
@@ -900,4 +904,27 @@ enum ipa_hw_type IPACM_Config::GetIPAVer(bool get)
 	}
 	IPACMDBG_H("IPA version is %d.\n", ver);
 	return ver;
+}
+
+bool IPACM_Config::isEthBridgingSupported()
+{
+	enum ipa_hw_type hw_type;
+
+	hw_type = GetIPAVer();
+
+#ifdef IPA_HW_v4_7
+	return ((hw_type >= IPA_HW_v4_5) &&
+		(hw_type != IPA_HW_v4_7));
+#else
+	return (hw_type >= IPA_HW_v4_5);
+#endif
+}
+
+bool IPACM_Config::isIPAv3Supported()
+{
+	enum ipa_hw_type hw_type;
+
+	hw_type = GetIPAVer();
+
+	return (hw_type >= IPA_HW_v3_0);
 }

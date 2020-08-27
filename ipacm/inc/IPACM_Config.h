@@ -94,7 +94,7 @@ public:
 	ipacm_alg *alg_table;
 
 	/* Store private subnet configuration from XML file */
-	ipa_private_subnet private_subnet_table[IPA_MAX_PRIVATE_SUBNET_ENTRIES];
+	ipa_private_subnet private_subnet_table[IPA_MAX_PRIVATE_SUBNET_ENTRIES + IPA_MAX_MTU_ENTRIES];
 
 	/* Store the non nat iface names */
 	NatIfaces *pNatIfaces;
@@ -146,6 +146,11 @@ public:
 	struct ipa_ioc_get_rt_tbl rt_tbl_odu_v4, rt_tbl_odu_v6;
 
 	bool isMCC_Mode;
+
+	/* IPA_HW_FNR_STATS */
+	bool hw_fnr_stats_support;
+	int hw_counter_offset;
+	int sw_counter_offset;
 
 	/* To return the instance */
 	static IPACM_Config* GetInstance();
@@ -255,6 +260,10 @@ public:
 	int DelExtProp(ipa_ip_type ip_type);
 
 	enum ipa_hw_type GetIPAVer(bool get = false);
+
+	bool isEthBridgingSupported();
+
+	bool isIPAv3Supported();
 
 	int Init(void);
 
