@@ -113,6 +113,12 @@ int ipa_reset();
 int ipa_query_wlan_client();
 #endif
 
+
+/* support ipa-hw-index-counters */
+#ifdef IPA_IOCTL_SET_FNR_COUNTER_INFO
+int ipa_reset_hw_index_counter();
+#endif
+
 #ifdef FEATURE_IPACM_HAL
 	IPACM_OffloadManager* OffloadMng;
 	HAL *hal;
@@ -240,6 +246,10 @@ void* ipa_driver_msg_notifier(void *param)
 #endif
 	struct ipa_get_data_stats_resp_msg_v01 event_data_stats;
 	struct ipa_get_apn_data_stats_resp_msg_v01 event_network_stats;
+#ifdef IPA_RT_SUPPORT_COAL
+	struct ipa_coalesce_info coalesce_info;
+#endif
+
 #ifdef FEATURE_IPACM_HAL
 	IPACM_OffloadManager* OffloadMng;
 #endif
@@ -821,6 +831,40 @@ void* ipa_driver_msg_notifier(void *param)
 			evt_data.evt_data = mapping;
 			break;
 #endif
+#ifdef IPA_RT_SUPPORT_COAL
+		case IPA_COALESCE_ENABLE:
+			memcpy(&coalesce_info, buffer + sizeof(struct ipa_msg_meta), sizeof(struct ipa_coalesce_info));
+			IPACMDBG_H("Received IPA_COALESCE_ENABLE qmap-id:%d tcp:%d, udp%d\n",
+				coalesce_info.qmap_id, coalesce_info.tcp_enable, coalesce_info.udp_enable);
+			if (coalesce_info.qmap_id >=IPA_MAX_NUM_SW_PDNS)
+			{
+				IPACMERR("qmap_id (%d) beyond the Max range (%d), abort\n",
+				coalesce_info.qmap_id, IPA_MAX_NUM_SW_PDNS);
+				return NULL;
+			}
+			IPACM_Wan::coalesce_config(coalesce_info.qmap_id, coalesce_info.tcp_enable, coalesce_info.udp_enable);
+			/* Notify all LTE instance to do RSC configuration */
+			evt_data.event = IPA_COALESCE_NOTICE;
+			evt_data.evt_data = NULL;
+			break;
+
+		case IPA_COALESCE_DISABLE:
+			memcpy(&coalesce_info, buffer + sizeof(struct ipa_msg_meta), sizeof(struct ipa_coalesce_info));
+			IPACMDBG_H("Received IPA_COALESCE_DISABLE qmap-id:%d tcp:%d, udp%d\n",
+				coalesce_info.qmap_id, coalesce_info.tcp_enable, coalesce_info.udp_enable);
+			if (coalesce_info.qmap_id >=IPA_MAX_NUM_SW_PDNS)
+			{
+				IPACMERR("qmap_id (%d) beyond the Max range (%d), abort\n",
+				coalesce_info.qmap_id, IPA_MAX_NUM_SW_PDNS);
+				return NULL;
+			}
+			IPACM_Wan::coalesce_config(coalesce_info.qmap_id, false, false);
+			/* Notify all LTE instance to do RSC configuration */
+			evt_data.event = IPA_COALESCE_NOTICE;
+			evt_data.evt_data = NULL;
+			break;
+#endif
+
 		default:
 			IPACMDBG_H("Unhandled message type: %d\n", event_hdr.msg_type);
 			continue;
@@ -894,6 +938,11 @@ int main(int argc, char **argv)
 	ipa_reset();
 #endif
 
+#ifdef IPA_IOCTL_SET_FNR_COUNTER_INFO
+	IPACMDBG_H("Configure IPA-HW index-counter\n");
+	ipa_reset_hw_index_counter();
+#endif
+
 	neigh = new IPACM_Neighbor();
 	ifacemgr = new IPACM_IfaceManager();
 #ifdef FEATURE_IPACM_HAL
@@ -902,16 +951,18 @@ int main(int argc, char **argv)
 	IPACMDBG_H(" START IPACM_OffloadManager and link to android framework\n");
 #endif
 
-#ifdef FEATURE_ETH_BRIDGE_LE
-	IPACM_LanToLan* lan2lan = IPACM_LanToLan::get_instance();
-	IPACMDBG_H("Staring IPACM_LanToLan instance %p\n", lan2lan);
-#endif
-
+	if (IPACM_Iface::ipacmcfg->isEthBridgingSupported())
+	{
+		IPACM_LanToLan* lan2lan = IPACM_LanToLan::get_instance();
+		IPACMDBG_H("Staring IPACM_LanToLan instance %p\n", lan2lan);
+	}
 	CtList = new IPACM_ConntrackListener();
 
 	IPACMDBG_H("Staring IPA main\n");
 	IPACMDBG_H("ipa_cmdq_successful\n");
 
+	/* reset coalesce settings */
+	IPACM_Wan::coalesce_config_reset();
 
 	RegisterForSignals();
 
@@ -1116,6 +1167,54 @@ int ipa_reset()
 	}
 
 	IPACMDBG_H("send IPA_IOC_CLEANUP \n");
+	close(fd);
+	return IPACM_SUCCESS;
+}
+#endif
+
+#ifdef IPA_IOCTL_SET_FNR_COUNTER_INFO
+int ipa_reset_hw_index_counter()
+{
+	int fd = -1;
+	struct ipa_ioc_flt_rt_counter_alloc fnr_counters;
+	struct ipa_ioc_fnr_index_info fnr_info;
+
+	if ((fd = open(IPA_DEVICE_NAME, O_RDWR)) < 0) {
+		IPACMERR("Failed opening %s.\n", IPA_DEVICE_NAME);
+		return IPACM_FAILURE;
+	}
+
+	memset(&fnr_counters, 0, sizeof(fnr_counters));
+	fnr_counters.hw_counter.num_counters = 4;
+	fnr_counters.hw_counter.allow_less = false;
+	fnr_counters.sw_counter.num_counters = 4;
+	fnr_counters.sw_counter.allow_less = false;
+	IPACMDBG_H("Allocating %d hw counters and %d sw counters\n",
+		fnr_counters.hw_counter.num_counters, fnr_counters.sw_counter.num_counters);
+
+	if (ioctl(fd, IPA_IOC_FNR_COUNTER_ALLOC, &fnr_counters) < 0) {
+		IPACMERR("IPA_IOC_FNR_COUNTER_ALLOC call failed: %s \n", strerror(errno));
+		close(fd);
+		return IPACM_FAILURE;
+	}
+
+	IPACMDBG_H("hw-counter start offset %d, sw-counter start offset %d\n",
+		fnr_counters.hw_counter.start_id, fnr_counters.sw_counter.start_id);
+	IPACM_Iface::ipacmcfg->hw_fnr_stats_support = true;
+	IPACM_Iface::ipacmcfg->hw_counter_offset = fnr_counters.hw_counter.start_id;
+	IPACM_Iface::ipacmcfg->sw_counter_offset = fnr_counters.sw_counter.start_id;
+
+	/* set FNR counter info */
+	memset(&fnr_info, 0, sizeof(fnr_info));
+	fnr_info.hw_counter_offset = fnr_counters.hw_counter.start_id;
+	fnr_info.sw_counter_offset = fnr_counters.sw_counter.start_id;
+
+	if (ioctl(fd, IPA_IOC_SET_FNR_COUNTER_INFO, &fnr_info) < 0) {
+		IPACMERR("IPA_IOC_SET_FNR_COUNTER_INFO call failed: %s \n", strerror(errno));
+		close(fd);
+		return IPACM_FAILURE;
+	}
+
 	close(fd);
 	return IPACM_SUCCESS;
 }
